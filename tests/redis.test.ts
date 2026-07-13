@@ -5,21 +5,16 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { startRedisHere } from "../index";
 
-const shouldSkip =
-  process.env.SKIP_REDIS_TEST === "1" ||
-  (process.platform !== "darwin" && process.platform !== "linux");
+const supported =
+  process.platform === "darwin" || process.platform === "linux";
 
-const port = Number(
-  process.env.REDIS_PORT_TEST ?? 36000 + (process.pid % 1000)
-);
+const port = 36000 + (process.pid % 1000);
 
-test.skipIf(shouldSkip)(
+test.skipIf(!supported)(
   "redis programmatic startup persists data and config under db-here/redis",
   async () => {
     const projectDir = mkdtempSync(join(tmpdir(), "db-here-redis-"));
-    const installationDir =
-      process.env.REDIS_INSTALL_DIR ??
-      join(process.cwd(), "db-here", "redis", "bin");
+    const installationDir = join(process.cwd(), "db-here", "redis", "bin");
 
     const handle = await startRedisHere({
       engine: "redis",
@@ -38,12 +33,10 @@ test.skipIf(shouldSkip)(
       expect(handle.serverVersion).toMatch(/^7\./);
 
       const cli = join(installationDir, "7.4.7", "bin", "redis-cli");
+      const libDir = join(installationDir, "7.4.7", "lib");
       const env = {
         ...process.env,
-        LD_LIBRARY_PATH: [
-          join(installationDir, "7.4.7", "lib"),
-          process.env.LD_LIBRARY_PATH ?? "",
-        ]
+        LD_LIBRARY_PATH: [libDir, process.env.LD_LIBRARY_PATH ?? ""]
           .filter(Boolean)
           .join(":"),
       };

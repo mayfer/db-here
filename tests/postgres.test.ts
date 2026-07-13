@@ -5,13 +5,10 @@ import { tmpdir } from "node:os";
 import { Client } from "pg";
 import { startPgHere } from "../index";
 
-const shouldSkip =
-  process.env.SKIP_PG_TEST === "1" ||
-  (process.platform !== "darwin" && process.platform !== "linux");
+const supported =
+  process.platform === "darwin" || process.platform === "linux";
 
-const port = Number(
-  process.env.PGPORT_PROGRAMMATIC_TEST ?? 63000 + (process.pid % 1000)
-);
+const port = 63000 + (process.pid % 1000);
 
 const installedVersions = (() => {
   try {
@@ -29,15 +26,13 @@ const installedVersions = (() => {
 // Prefer a binary already cached by sibling pg-here if present.
 const siblingPgBin = join(process.cwd(), "..", "pg-here", "pg_local", "bin");
 const installationDir =
-  process.env.PG_INSTALL_DIR ??
-  (installedVersions.length > 0
+  installedVersions.length > 0
     ? join(process.cwd(), "db-here", "postgres", "bin")
-    : siblingPgBin);
+    : siblingPgBin;
 
-const pinnedVersion =
-  process.env.PG_HERE_TEST_PG_VERSION ?? installedVersions.at(-1);
+const pinnedVersion = installedVersions.at(-1);
 
-test.skipIf(shouldSkip)(
+test.skipIf(!supported)(
   "postgres programmatic startup creates missing database and preserves data",
   async () => {
     const projectDir = mkdtempSync(join(tmpdir(), "db-here-pg-"));

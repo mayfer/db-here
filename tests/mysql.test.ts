@@ -5,24 +5,17 @@ import { tmpdir } from "node:os";
 import { createConnection } from "mysql2/promise";
 import { startMysqlHere } from "../index";
 
-const shouldSkip =
-  process.env.SKIP_MYSQL_TEST === "1" ||
-  (process.platform !== "darwin" && process.platform !== "linux");
+const supported =
+  process.platform === "darwin" || process.platform === "linux";
 
-const port = Number(
-  process.env.MYSQL_PORT_TEST ?? 34000 + (process.pid % 1000)
-);
+const port = 34000 + (process.pid % 1000);
 
-test.skipIf(shouldSkip)(
+test.skipIf(!supported)(
   "mysql programmatic startup creates database and preserves data on stop",
   async () => {
     const projectDir = mkdtempSync(join(tmpdir(), "db-here-mysql-"));
     const database = "app_startup_db";
-
-    // Reuse a binary cache under the repo if present to avoid re-downloading.
-    const installationDir =
-      process.env.MYSQL_INSTALL_DIR ??
-      join(process.cwd(), "db-here", "mysql", "bin");
+    const installationDir = join(process.cwd(), "db-here", "mysql", "bin");
 
     const handle = await startMysqlHere({
       engine: "mysql",

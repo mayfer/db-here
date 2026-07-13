@@ -81,7 +81,7 @@ const defaults = engineDefaults(engine);
 const username = argv.username ?? defaults.username;
 const password = argv.password ?? defaults.password;
 const database = argv.database ?? defaults.database;
-const version = argv["db-version"] ?? process.env.DB_VERSION;
+const version = argv["db-version"];
 const projectDir = process.cwd();
 
 const preStartState = (() => {

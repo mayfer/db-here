@@ -11,9 +11,8 @@ import {
   startOpensearchHere,
 } from "../index";
 
-const shouldSkip =
-  process.env.SKIP_NEW_ENGINE_TEST === "1" ||
-  (process.platform !== "darwin" && process.platform !== "linux");
+const supported =
+  process.platform === "darwin" || process.platform === "linux";
 
 function tempProject(): string {
   return mkdtempSync(join(tmpdir(), "db-here-new-"));
@@ -35,7 +34,7 @@ async function tcpOk(port: number): Promise<boolean> {
   });
 }
 
-test.skipIf(shouldSkip)(
+test.skipIf(!supported)(
   "memcached starts and answers",
   async () => {
     const projectDir = tempProject();
@@ -59,7 +58,7 @@ test.skipIf(shouldSkip)(
   180_000
 );
 
-test.skipIf(shouldSkip)(
+test.skipIf(!supported)(
   "minio starts",
   async () => {
     const projectDir = tempProject();
@@ -82,7 +81,7 @@ test.skipIf(shouldSkip)(
   180_000
 );
 
-test.skipIf(shouldSkip)(
+test.skipIf(!supported)(
   "mongodb starts",
   async () => {
     const projectDir = tempProject();
@@ -106,7 +105,7 @@ test.skipIf(shouldSkip)(
   300_000
 );
 
-test.skipIf(shouldSkip || process.env.SKIP_CLICKHOUSE_TEST === "1")(
+test.skipIf(!supported)(
   "clickhouse starts",
   async () => {
     const projectDir = tempProject();
@@ -132,10 +131,7 @@ test.skipIf(shouldSkip || process.env.SKIP_CLICKHOUSE_TEST === "1")(
   300_000
 );
 
-// OpenSearch/ES is a large download (~300MB+); skip unless explicitly enabled.
-test.skipIf(
-  shouldSkip || process.env.RUN_OPENSEARCH_TEST !== "1"
-)(
+test.skipIf(!supported)(
   "opensearch starts",
   async () => {
     const projectDir = tempProject();
