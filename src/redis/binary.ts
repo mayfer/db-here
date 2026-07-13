@@ -4,7 +4,6 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -15,6 +14,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { unzipSync } from "fflate";
 import { decompress as zstdDecompress } from "fzstd";
+import { safeRename } from "../download.js";
 import {
   condaPackageUrl,
   DEFAULT_REDIS_VERSION,
@@ -110,7 +110,8 @@ export async function ensureRedisBinary(
     ]) {
       const src = join(staging, "bin", name);
       if (existsSync(src)) {
-        renameSync(src, join(finalStaging, "bin", name));
+        // Same filesystem (both under downloadDir staging) — safeRename is fine.
+        safeRename(src, join(finalStaging, "bin", name));
       }
     }
 
@@ -121,7 +122,7 @@ export async function ensureRedisBinary(
           /\.(dylib|so)(\.\d+)*$/.test(entry) &&
           (entry.includes("ssl") || entry.includes("crypto"))
         ) {
-          renameSync(join(libDir, entry), join(finalStaging, "lib", entry));
+          safeRename(join(libDir, entry), join(finalStaging, "lib", entry));
         }
       }
     }
@@ -132,11 +133,8 @@ export async function ensureRedisBinary(
       "utf8"
     );
 
-    if (existsSync(basedir)) {
-      rmSync(basedir, { recursive: true, force: true });
-    }
     mkdirSync(installationDir, { recursive: true });
-    renameSync(finalStaging, basedir);
+    safeRename(finalStaging, basedir);
 
     if (!existsSync(redisServerPath)) {
       throw new Error(`Redis binary missing after install: ${redisServerPath}`);

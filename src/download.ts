@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import {
   chmodSync,
+  cpSync,
   createWriteStream,
   existsSync,
   mkdirSync,
@@ -109,12 +110,29 @@ export function makeTempDir(prefix: string): string {
   return dir;
 }
 
+/**
+ * Move a file or directory to `to`.
+ * Falls back to copy+delete when rename fails with EXDEV (cross-device),
+ * which is common on Linux when /tmp and $HOME are different filesystems.
+ */
 export function safeRename(from: string, to: string): void {
   mkdirSync(join(to, ".."), { recursive: true });
   if (existsSync(to)) {
     rmSync(to, { recursive: true, force: true });
   }
-  renameSync(from, to);
+  try {
+    renameSync(from, to);
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: string }).code)
+        : "";
+    if (code !== "EXDEV") {
+      throw error;
+    }
+    cpSync(from, to, { recursive: true, force: true });
+    rmSync(from, { recursive: true, force: true });
+  }
 }
 
 export function findFirst(

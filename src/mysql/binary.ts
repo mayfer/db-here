@@ -4,7 +4,6 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  renameSync,
   rmSync,
   statSync,
 } from "node:fs";
@@ -12,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { safeRename } from "../download.js";
 import {
   detectMysqlPlatform,
   mysqlArchiveFileName,
@@ -73,10 +73,7 @@ export async function ensureMysqlBinary(
       );
     }
 
-    if (existsSync(basedir)) {
-      rmSync(basedir, { recursive: true, force: true });
-    }
-    renameSync(extractedRoot, basedir);
+    safeRename(extractedRoot, basedir);
 
     if (!existsSync(mysqldPath)) {
       throw new Error(
