@@ -1,0 +1,44 @@
+# dependencies
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# dotenv
+.env
+.env.*
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IDE / OS
+.idea
+.DS_Store
+
+# local database binaries + data + config (when developing this package itself)
+# Note: consumer projects should gitignore "db-here/" at their project root.
+/db-here/
+/db-here-tmp-*/
+
+# legacy folder names (if anything old is still around)
+databases
+pg_local
+mysql_local
+redis_local
+db_local
+
+# lockfile stays local during early package development
+bun.lock

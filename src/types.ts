@@ -1,0 +1,107 @@
+import type { ShutdownSignal } from "./shutdown.js";
+
+export type DbEngine =
+  | "postgres"
+  | "mysql"
+  | "redis"
+  | "mongodb"
+  | "minio"
+  | "clickhouse"
+  | "opensearch"
+  | "memcached";
+
+export interface StopOptions {
+  cleanup?: boolean;
+}
+
+export interface CommonDbOptions {
+  projectDir?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  database?: string;
+  createDatabaseIfMissing?: boolean;
+  registerProcessShutdownHandlers?: boolean;
+  shutdownSignals?: ShutdownSignal[];
+  cleanupOnShutdown?: boolean;
+  autoPort?: boolean;
+  version?: string;
+  dataDir?: string;
+  installationDir?: string;
+  configDir?: string;
+}
+
+export interface DbHereHandle {
+  engine: DbEngine;
+  connectionString: string;
+  databaseConnectionString: string;
+  database: string;
+  port: number;
+  username: string;
+  /** Running server version string when known. */
+  serverVersion?: string;
+  stop: (options?: StopOptions) => Promise<void>;
+  cleanup: () => Promise<void>;
+  ensureDatabase: (databaseName?: string) => Promise<boolean>;
+  removeShutdownHooks: () => void;
+}
+
+export interface PostgresOptions extends CommonDbOptions {
+  engine?: "postgres";
+  postgresVersion?: string;
+  persistent?: boolean;
+  enablePgStatStatements?: boolean;
+}
+
+export interface MysqlOptions extends CommonDbOptions {
+  engine?: "mysql";
+  mysqlVersion?: string;
+  socketPath?: string;
+}
+
+export interface RedisOptions extends CommonDbOptions {
+  engine?: "redis";
+  confDir?: string;
+  redisVersion?: string;
+}
+
+export interface MongodbOptions extends CommonDbOptions {
+  engine?: "mongodb";
+  mongodbVersion?: string;
+}
+
+export interface MinioOptions extends CommonDbOptions {
+  engine?: "minio";
+  /** Console UI port (default: API port + 1). */
+  consolePort?: number;
+  minioVersion?: string;
+}
+
+export interface ClickhouseOptions extends CommonDbOptions {
+  engine?: "clickhouse";
+  /** Native TCP port (default: HTTP port + 1). */
+  nativePort?: number;
+  clickhouseVersion?: string;
+}
+
+export interface OpensearchOptions extends CommonDbOptions {
+  engine?: "opensearch";
+  opensearchVersion?: string;
+}
+
+export interface MemcachedOptions extends CommonDbOptions {
+  engine?: "memcached";
+  memcachedVersion?: string;
+  /** Memory limit in MB (default 64). */
+  memoryMb?: number;
+}
+
+export type DbHereOptions =
+  | (PostgresOptions & { engine?: "postgres" })
+  | (MysqlOptions & { engine: "mysql" })
+  | (RedisOptions & { engine: "redis" })
+  | (MongodbOptions & { engine: "mongodb" })
+  | (MinioOptions & { engine: "minio" })
+  | (ClickhouseOptions & { engine: "clickhouse" })
+  | (OpensearchOptions & { engine: "opensearch" })
+  | (MemcachedOptions & { engine: "memcached" });

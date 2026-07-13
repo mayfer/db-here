@@ -1,0 +1,73 @@
+{
+  "name": "db-here",
+  "version": "0.1.0",
+  "description": "Per-project embedded databases (PostgreSQL, MySQL, Redis, MongoDB, MinIO, ClickHouse, OpenSearch, Memcached) with local binaries and data — zero OS setup.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "db-here": "bin/db-here.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin/db-here.mjs",
+    "scripts/db-dev.mjs",
+    "scripts/cli-helpers.mjs",
+    "scripts/cli-shared.mjs",
+    "README.md"
+  ],
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mayfer/db-here.git"
+  },
+  "homepage": "https://github.com/mayfer/db-here",
+  "bugs": {
+    "url": "https://github.com/mayfer/db-here/issues"
+  },
+  "keywords": [
+    "postgres",
+    "postgresql",
+    "mysql",
+    "redis",
+    "mongodb",
+    "minio",
+    "clickhouse",
+    "opensearch",
+    "memcached",
+    "embedded",
+    "local-development",
+    "database"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "db-here": "bun run scripts/db-dev.mjs",
+    "test": "bun test",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "fzstd": "^0.1.1",
+    "mysql2": "^3.14.0",
+    "pg": "^8.16.3",
+    "pg-embedded": "^0.2.3",
+    "yargs": "^18.0.0"
+  }
+}
