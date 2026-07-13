@@ -36,6 +36,7 @@ class OpensearchInstance {
   readonly dataDir: string;
   readonly configDir: string;
   readonly installationDir: string;
+  readonly version: string;
   readonly port: number;
   private process: ChildProcess | null = null;
   private homeDir = "";
@@ -49,6 +50,7 @@ class OpensearchInstance {
     dataDir?: string;
     configDir?: string;
     installationDir?: string;
+    version: string;
     port: number;
     onProgress?: (m: string) => void;
   }) {
@@ -56,6 +58,7 @@ class OpensearchInstance {
     this.dataDir = resolve(opts.dataDir ?? paths.data);
     this.configDir = resolve(opts.configDir ?? paths.config);
     this.installationDir = resolve(opts.installationDir ?? paths.bin);
+    this.version = opts.version;
     this.port = opts.port;
     this.onProgress = opts.onProgress;
     this.logPath = join(this.configDir, "opensearch.log");
@@ -72,6 +75,7 @@ class OpensearchInstance {
   async start(): Promise<void> {
     const ensured = await ensureSearchBinary({
       installationDir: this.installationDir,
+      version: this.version,
       onProgress: this.onProgress,
     });
     this.homeDir = ensured.homeDir;
@@ -164,6 +168,7 @@ class OpensearchInstance {
 
 async function ensureSearchBinary(options: {
   installationDir: string;
+  version: string;
   onProgress?: (m: string) => void;
 }): Promise<{
   homeDir: string;
@@ -173,7 +178,7 @@ async function ensureSearchBinary(options: {
   const { os, cpu } = detectOsCpu();
 
   if (os === "linux") {
-    const version = DEFAULT_OPENSEARCH_VERSION;
+    const version = options.version;
     const arch = cpu === "arm64" ? "linux-arm64" : "linux-x64";
     const homeDir = join(options.installationDir, `opensearch-${version}`);
     const binPath = join(homeDir, "bin", "opensearch");
@@ -206,7 +211,7 @@ async function ensureSearchBinary(options: {
   }
 
   // macOS: OpenSearch has no official macOS bundles → Elasticsearch with security off.
-  const version = DEFAULT_ELASTICSEARCH_MAC_VERSION;
+  const version = options.version;
   const arch = cpu === "arm64" ? "darwin-aarch64" : "darwin-x86_64";
   const homeDir = join(options.installationDir, `elasticsearch-${version}`);
   const binPath = join(homeDir, "bin", "elasticsearch");
@@ -253,12 +258,20 @@ export async function startOpensearchHere(
   });
   const database = options.database ?? DEFAULT_OPENSEARCH_DATABASE;
   const projectDir = resolve(options.projectDir ?? process.cwd());
+  const { os } = detectOsCpu();
+  const version =
+    options.opensearchVersion ??
+    options.version ??
+    (os === "darwin"
+      ? DEFAULT_ELASTICSEARCH_MAC_VERSION
+      : DEFAULT_OPENSEARCH_VERSION);
 
   const instance = new OpensearchInstance({
     projectDir,
     dataDir: options.dataDir,
     configDir: options.configDir,
     installationDir: options.installationDir,
+    version,
     port,
     onProgress: (m) => console.error(m),
   });

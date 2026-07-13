@@ -20,6 +20,7 @@
     "scripts/db-dev.mjs",
     "scripts/cli-helpers.mjs",
     "scripts/cli-shared.mjs",
+    "scripts/cli-versions.mjs",
     "README.md"
   ],
   "private": false,

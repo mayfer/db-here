@@ -31,6 +31,7 @@ class MinioInstance {
   readonly dataDir: string;
   readonly configDir: string;
   readonly installationDir: string;
+  readonly version: string;
   readonly port: number;
   readonly consolePort: number;
   readonly username: string;
@@ -44,6 +45,7 @@ class MinioInstance {
     dataDir?: string;
     configDir?: string;
     installationDir?: string;
+    version: string;
     port: number;
     consolePort: number;
     username: string;
@@ -54,6 +56,7 @@ class MinioInstance {
     this.dataDir = resolve(opts.dataDir ?? paths.data);
     this.configDir = resolve(opts.configDir ?? paths.config);
     this.installationDir = resolve(opts.installationDir ?? paths.bin);
+    this.version = opts.version;
     this.port = opts.port;
     this.consolePort = opts.consolePort;
     this.username = opts.username;
@@ -64,6 +67,7 @@ class MinioInstance {
   async start(): Promise<void> {
     this.minioPath = await ensureMinioBinary({
       installationDir: this.installationDir,
+      version: this.version,
       onProgress: this.onProgress,
     });
     mkdirSync(this.dataDir, { recursive: true });
@@ -111,7 +115,7 @@ class MinioInstance {
   }
 }
 
-function minioDownloadUrl(): { url: string; label: string } {
+function minioDownloadUrl(version: string): { url: string; label: string } {
   const { os, cpu } = detectOsCpu();
   const arch =
     os === "darwin"
@@ -121,22 +125,32 @@ function minioDownloadUrl(): { url: string; label: string } {
       : cpu === "arm64"
         ? "linux-arm64"
         : "linux-amd64";
+  // MinIO release channel is "latest"; versioned builds use RELEASE.YYYY-… tags
+  // under the same arch path when not "latest".
+  const channel = version === "latest" ? "latest" : version;
+  const base =
+    channel === "latest"
+      ? `https://dl.min.io/server/minio/release/${arch}/minio`
+      : `https://dl.min.io/server/minio/release/${arch}/archive/minio.${channel}`;
   return {
-    label: arch,
-    url: `https://dl.min.io/server/minio/release/${arch}/minio`,
+    label: `${arch}/${channel}`,
+    url: base,
   };
 }
 
 async function ensureMinioBinary(options: {
   installationDir: string;
+  version: string;
   onProgress?: (m: string) => void;
 }): Promise<string> {
-  const basedir = join(options.installationDir, DEFAULT_MINIO_VERSION);
+  const basedir = join(options.installationDir, options.version);
   const binary = join(basedir, "minio");
   if (existsSync(binary)) return binary;
 
-  const { url, label } = minioDownloadUrl();
-  options.onProgress?.(`Downloading MinIO (${label})…`);
+  const { url, label } = minioDownloadUrl(options.version);
+  options.onProgress?.(
+    `Downloading MinIO ${options.version} (${label})…`
+  );
   const tmp = makeTempDir("db-here-minio");
   try {
     const dest = join(tmp, "minio");
@@ -145,7 +159,7 @@ async function ensureMinioBinary(options: {
     mkdirSync(basedir, { recursive: true });
     safeRename(dest, binary);
     chmodX(binary);
-    options.onProgress?.(`MinIO ready at ${basedir}`);
+    options.onProgress?.(`MinIO ${options.version} ready at ${basedir}`);
     return binary;
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -168,6 +182,8 @@ export async function startMinioHere(
       autoPort: true,
     }));
 
+  const version =
+    options.minioVersion ?? options.version ?? DEFAULT_MINIO_VERSION;
   const username = options.username ?? DEFAULT_MINIO_USERNAME;
   const password = options.password ?? DEFAULT_MINIO_PASSWORD;
   const database = options.database ?? "default";
@@ -178,6 +194,7 @@ export async function startMinioHere(
     dataDir: options.dataDir,
     configDir: options.configDir,
     installationDir: options.installationDir,
+    version,
     port,
     consolePort,
     username,
@@ -198,7 +215,7 @@ export async function startMinioHere(
     database,
     port,
     username,
-    serverVersion: DEFAULT_MINIO_VERSION,
+    serverVersion: version,
     common: options,
     stopInstance: (i) => i.stop(),
     cleanupInstance: (i) => i.cleanup(),

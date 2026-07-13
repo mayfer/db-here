@@ -25,8 +25,17 @@ import {
   engineLabel,
   normalizeEngine,
 } from "../scripts/cli-shared.mjs";
+import { packageVersion, parseVersionFlag } from "../scripts/cli-versions.mjs";
 
-const argv = await yargs(hideBin(process.argv))
+const rawArgs = hideBin(process.argv);
+const versionFlag = parseVersionFlag(rawArgs);
+
+if (versionFlag.present && versionFlag.value === undefined) {
+  console.log(packageVersion());
+  process.exit(0);
+}
+
+const argv = await yargs(rawArgs)
   .scriptName("db-here")
   .usage("$0 <engine> [options]")
   .command("$0 [engine]", "Start a project-local database", (y) =>
@@ -44,17 +53,17 @@ const argv = await yargs(hideBin(process.argv))
     alias: "d",
     describe: "Database / bucket / index / logical DB",
   })
-  .option("db-version", { describe: "Engine version pin (when supported)" })
+  .option("version", {
+    describe: "Pin engine version (omit value to print db-here version)",
+    type: "string",
+  })
   .option("auto-port", {
     default: "true",
     describe: "Auto-assign available port when default is in use",
     type: "string",
   })
-  .example("$0 mongodb", "MongoDB")
-  .example("$0 minio", "MinIO")
-  .example("$0 clickhouse", "ClickHouse")
-  .example("$0 opensearch", "OpenSearch")
-  .example("$0 memcached", "Memcached")
+  .example("$0 --version", "Print db-here package version")
+  .example("$0 mysql --version 9.7.1", "Start MySQL 9.7.1")
   .help()
   .parse();
 
@@ -79,7 +88,7 @@ const defaults = engineDefaults(engine);
 const username = argv.username ?? defaults.username;
 const password = argv.password ?? defaults.password;
 const database = argv.database ?? defaults.database;
-const version = argv["db-version"];
+const version = versionFlag.value;
 const projectDir = process.cwd();
 
 const preStartState = (() => {
