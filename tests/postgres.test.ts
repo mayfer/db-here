@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Client } from "pg";
@@ -10,32 +10,13 @@ const supported =
 
 const port = 63000 + (process.pid % 1000);
 
-const installedVersions = (() => {
-  try {
-    return readdirSync(join(process.cwd(), "db-here", "postgres", "bin"), {
-      withFileTypes: true,
-    })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .sort((a, b) => a.localeCompare(b));
-  } catch {
-    return [];
-  }
-})();
-
-// Prefer a binary already cached by sibling pg-here if present.
-const siblingPgBin = join(process.cwd(), "..", "pg-here", "pg_local", "bin");
-const installationDir =
-  installedVersions.length > 0
-    ? join(process.cwd(), "db-here", "postgres", "bin")
-    : siblingPgBin;
-
-const pinnedVersion = installedVersions.at(-1);
-
 test.skipIf(!supported)(
   "postgres programmatic startup creates missing database and preserves data",
   async () => {
     const projectDir = mkdtempSync(join(tmpdir(), "db-here-pg-"));
+    // Shared platform-native binary cache for this repo (never a sibling
+    // project's bin tree — that can be the wrong OS/arch).
+    const installationDir = join(process.cwd(), "db-here", "postgres", "bin");
     const database = "app_startup_db";
     const handle = await startPgHere({
       projectDir,
@@ -43,7 +24,6 @@ test.skipIf(!supported)(
       database,
       createDatabaseIfMissing: true,
       installationDir,
-      postgresVersion: pinnedVersion,
       registerProcessShutdownHandlers: false,
     });
 
@@ -67,7 +47,6 @@ test.skipIf(!supported)(
         database,
         createDatabaseIfMissing: true,
         installationDir,
-        postgresVersion: pinnedVersion,
         registerProcessShutdownHandlers: false,
       });
 
@@ -88,5 +67,5 @@ test.skipIf(!supported)(
       rmSync(projectDir, { recursive: true, force: true });
     }
   },
-  120_000
+  180_000
 );

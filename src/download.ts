@@ -130,7 +130,16 @@ export function safeRename(from: string, to: string): void {
     if (code !== "EXDEV") {
       throw error;
     }
+    const fromStat = statSync(from);
     cpSync(from, to, { recursive: true, force: true });
+    // Preserve mode for files (some filesystems drop +x on copy).
+    if (fromStat.isFile()) {
+      try {
+        chmodSync(to, fromStat.mode);
+      } catch {
+        // ignore; callers often chmodX afterward
+      }
+    }
     rmSync(from, { recursive: true, force: true });
   }
 }

@@ -85,6 +85,7 @@ class MemcachedInstance {
       "utf8"
     );
 
+    // -u is only needed/allowed when starting as root.
     const args = [
       "-l",
       "127.0.0.1",
@@ -92,15 +93,20 @@ class MemcachedInstance {
       String(this.port),
       "-m",
       String(this.memoryMb),
-      "-u",
-      process.env.USER || process.env.LOGNAME || "nobody",
     ];
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      args.push(
+        "-u",
+        process.env.USER || process.env.LOGNAME || "nobody"
+      );
+    }
 
     const env = { ...process.env };
     if (process.platform === "linux") {
       env.LD_LIBRARY_PATH = this.libDir + (env.LD_LIBRARY_PATH ? `:${env.LD_LIBRARY_PATH}` : "");
     }
 
+    const stderrChunks: Buffer[] = [];
     // Linux homebrew bottles need the system dynamic linker invoked explicitly.
     if (process.platform === "linux") {
       const loader = findLinuxLoader();
@@ -109,16 +115,30 @@ class MemcachedInstance {
         this.libDir,
         this.binaryPath,
         ...args,
-      ], { env });
+      ], { env, stderr: "pipe" });
     } else {
-      this.process = spawnDetached(this.binaryPath, args, { env });
+      this.process = spawnDetached(this.binaryPath, args, {
+        env,
+        stderr: "pipe",
+      });
     }
+
+    this.process.stderr?.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+    });
 
     this.process.on("exit", () => {
       this.process = null;
     });
 
-    await waitForTcp(this.port, "127.0.0.1", 30_000);
+    try {
+      await waitForTcp(this.port, "127.0.0.1", 30_000);
+    } catch (error) {
+      const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+      throw new Error(
+        `Memcached failed to start on port ${this.port}.\n${stderr || "(no stderr)"}\n${error}`
+      );
+    }
   }
 
   async stop(): Promise<void> {

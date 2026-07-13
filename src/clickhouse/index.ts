@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import {
@@ -281,15 +281,29 @@ async function ensureClickhouseBinary(options: {
       await downloadFile(url, archive, options.onProgress);
       options.onProgress?.(`Extracting ClickHouse ${options.version}…`);
       await extractTar(archive, tmp);
-      const found = findFirst(
-        tmp,
-        (name, full) => name === "clickhouse" && !full.endsWith(".tgz")
-      );
+      // Prefer usr/bin/clickhouse (file). Avoid matching share/clickhouse (dir).
+      const found =
+        findFirst(
+          tmp,
+          (name, full) =>
+            name === "clickhouse" &&
+            full.includes(`${join("bin", "clickhouse")}`) &&
+            isRegularFile(full)
+        ) ??
+        findFirst(
+          tmp,
+          (name, full) => name === "clickhouse" && isRegularFile(full)
+        );
       if (!found) throw new Error("clickhouse binary not found in archive");
       mkdirSync(basedir, { recursive: true });
       safeRename(found, binary);
     }
     chmodX(binary);
+    if (!isRegularFile(binary)) {
+      throw new Error(
+        `ClickHouse install is not a binary file: ${binary}`
+      );
+    }
     options.onProgress?.(`ClickHouse ${options.version} ready`);
     return binary;
   } finally {
@@ -364,6 +378,14 @@ export async function startClickhouseHere(
   });
 
   return { ...handle, nativePort };
+}
+
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }
 
 export function getPreStartClickhouseState(projectDir?: string) {

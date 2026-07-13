@@ -7,12 +7,15 @@ export function spawnDetached(
   options: {
     env?: NodeJS.ProcessEnv;
     cwd?: string;
+    /** When "pipe", capture stderr on the returned ChildProcess. */
+    stderr?: "ignore" | "pipe";
   } = {}
 ): ChildProcess {
+  const stderr = options.stderr ?? "ignore";
   const child = spawn(command, args, {
     env: options.env ?? process.env,
     cwd: options.cwd,
-    stdio: ["ignore", "ignore", "ignore"],
+    stdio: ["ignore", "ignore", stderr],
     detached: false,
   });
   return child;
