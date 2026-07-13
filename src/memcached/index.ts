@@ -6,6 +6,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { cpus } from "node:os";
 import { join, resolve } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import {
@@ -26,8 +27,10 @@ import { spawnDetached, waitForExit } from "../process.js";
 import type { DbHereHandle, MemcachedOptions } from "../types.js";
 
 export const DEFAULT_MEMCACHED_PORT = 51211;
-export const DEFAULT_MEMCACHED_VERSION = "1.6.45";
+/** Default memcached release (source build on Linux; brew bottle on macOS). */
+export const DEFAULT_MEMCACHED_VERSION = "1.6.38";
 export const DEFAULT_MEMCACHED_MEMORY_MB = 64;
+const LIBEVENT_VERSION = "2.1.12-stable";
 
 export interface MemcachedHereHandle extends DbHereHandle {
   engine: "memcached";
@@ -78,7 +81,6 @@ class MemcachedInstance {
     mkdirSync(this.dataDir, { recursive: true });
     mkdirSync(this.configDir, { recursive: true });
 
-    // memcached is in-memory; dataDir is reserved for future persistence hooks.
     writeFileSync(
       join(this.configDir, "memcached.env"),
       `PORT=${this.port}\nMEMORY_MB=${this.memoryMb}\n`,
@@ -102,26 +104,23 @@ class MemcachedInstance {
     }
 
     const env = { ...process.env };
-    if (process.platform === "linux") {
-      env.LD_LIBRARY_PATH = this.libDir + (env.LD_LIBRARY_PATH ? `:${env.LD_LIBRARY_PATH}` : "");
+    if (this.libDir && existsSync(this.libDir)) {
+      if (process.platform === "linux") {
+        env.LD_LIBRARY_PATH =
+          this.libDir +
+          (env.LD_LIBRARY_PATH ? `:${env.LD_LIBRARY_PATH}` : "");
+      } else if (process.platform === "darwin") {
+        env.DYLD_LIBRARY_PATH =
+          this.libDir +
+          (env.DYLD_LIBRARY_PATH ? `:${env.DYLD_LIBRARY_PATH}` : "");
+      }
     }
 
     const stderrChunks: Buffer[] = [];
-    // Linux homebrew bottles need the system dynamic linker invoked explicitly.
-    if (process.platform === "linux") {
-      const loader = findLinuxLoader();
-      this.process = spawnDetached(loader, [
-        "--library-path",
-        this.libDir,
-        this.binaryPath,
-        ...args,
-      ], { env, stderr: "pipe" });
-    } else {
-      this.process = spawnDetached(this.binaryPath, args, {
-        env,
-        stderr: "pipe",
-      });
-    }
+    this.process = spawnDetached(this.binaryPath, args, {
+      env,
+      stderr: "pipe",
+    });
 
     this.process.stderr?.on("data", (chunk: Buffer) => {
       stderrChunks.push(chunk);
@@ -155,26 +154,9 @@ class MemcachedInstance {
   }
 }
 
-function findLinuxLoader(): string {
-  const candidates = [
-    "/lib64/ld-linux-x86-64.so.2",
-    "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
-    "/lib/ld-linux-aarch64.so.1",
-    "/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
-  ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  throw new Error(
-    "Could not find a system dynamic linker to run memcached on Linux"
-  );
-}
-
 type BrewBottleKey =
   | "arm64_sonoma"
   | "sonoma"
-  | "arm64_linux"
-  | "x86_64_linux"
   | "arm64_sequoia"
   | "arm64_tahoe";
 
@@ -186,10 +168,7 @@ function brewBottleKeys(): BrewBottleKey[] {
   if (os === "darwin" && cpu === "x64") {
     return ["sonoma"];
   }
-  if (os === "linux" && cpu === "arm64") {
-    return ["arm64_linux"];
-  }
-  return ["x86_64_linux"];
+  return ["arm64_sonoma"];
 }
 
 async function fetchBrewBottleUrl(
@@ -232,6 +211,24 @@ async function ensureMemcachedBinary(options: {
     return { binaryPath, libDir };
   }
 
+  // Homebrew Linux bottles need very new glibc (e.g. 2.38) and fail on
+  // Amazon Linux / older distros. Build from source on Linux instead.
+  if (process.platform === "linux") {
+    return ensureMemcachedFromSource(options);
+  }
+
+  return ensureMemcachedFromBrew(options);
+}
+
+async function ensureMemcachedFromBrew(options: {
+  installationDir: string;
+  version: string;
+  onProgress?: (m: string) => void;
+}): Promise<{ binaryPath: string; libDir: string }> {
+  const basedir = join(options.installationDir, options.version);
+  const binaryPath = join(basedir, "bin", "memcached");
+  const libDir = join(basedir, "lib");
+
   options.onProgress?.(
     `Downloading Memcached ${options.version} (Homebrew bottles)…`
   );
@@ -262,7 +259,6 @@ async function ensureMemcachedBinary(options: {
         safeRename(found, binaryPath);
         chmodX(binaryPath);
       } else {
-        // copy shared libs
         const libRoot = findFirst(extractDir, (name) => name === "lib");
         if (!libRoot) continue;
         for (const entry of readdirSync(libRoot)) {
@@ -281,10 +277,7 @@ async function ensureMemcachedBinary(options: {
       }
     }
 
-    if (process.platform === "darwin") {
-      await relocateMacBinary(binaryPath, libDir);
-    }
-
+    await relocateMacBinary(binaryPath, libDir);
     options.onProgress?.(`Memcached ${options.version} ready`);
     return { binaryPath, libDir };
   } finally {
@@ -292,11 +285,131 @@ async function ensureMemcachedBinary(options: {
   }
 }
 
+/**
+ * Build memcached + libevent from official sources into the project bin tree.
+ * Needs a C compiler and make once (standard on build hosts; not a package
+ * install of memcached itself).
+ */
+async function ensureMemcachedFromSource(options: {
+  installationDir: string;
+  version: string;
+  onProgress?: (m: string) => void;
+}): Promise<{ binaryPath: string; libDir: string }> {
+  const basedir = join(options.installationDir, options.version);
+  const binaryPath = join(basedir, "bin", "memcached");
+  const libDir = join(basedir, "lib");
+
+  await assertBuildTools();
+
+  options.onProgress?.(
+    `Building Memcached ${options.version} from source (Linux; avoids Homebrew glibc)…`
+  );
+
+  const work = makeTempDir("db-here-mc-src");
+  try {
+    mkdirSync(basedir, { recursive: true });
+
+    // 1) libevent
+    const libeventUrl = `https://github.com/libevent/libevent/releases/download/release-${LIBEVENT_VERSION}/libevent-${LIBEVENT_VERSION}.tar.gz`;
+    const libeventArchive = join(work, "libevent.tar.gz");
+    options.onProgress?.(`Downloading libevent ${LIBEVENT_VERSION}…`);
+    await downloadFile(libeventUrl, libeventArchive, options.onProgress);
+    await extractTar(libeventArchive, work);
+    const libeventSrc = findFirst(
+      work,
+      (name) => name.startsWith("libevent-") && !name.endsWith(".tar.gz")
+    );
+    if (!libeventSrc || !existsSync(join(libeventSrc, "configure"))) {
+      throw new Error("libevent source tree not found after extract");
+    }
+    options.onProgress?.(`Compiling libevent…`);
+    await runCommand(
+      join(libeventSrc, "configure"),
+      [
+        `--prefix=${basedir}`,
+        "--disable-samples",
+        "--disable-openssl",
+        "--enable-shared",
+      ],
+      { cwd: libeventSrc }
+    );
+    await runCommand("make", ["-j", String(parallelJobs())], {
+      cwd: libeventSrc,
+    });
+    await runCommand("make", ["install"], { cwd: libeventSrc });
+
+    // 2) memcached
+    const memUrl = `https://www.memcached.org/files/memcached-${options.version}.tar.gz`;
+    const memArchive = join(work, "memcached.tar.gz");
+    options.onProgress?.(
+      `Downloading Memcached ${options.version} source…`
+    );
+    await downloadFile(memUrl, memArchive, options.onProgress);
+    await extractTar(memArchive, work);
+    const memSrc = findFirst(
+      work,
+      (name) =>
+        name === `memcached-${options.version}` ||
+        (name.startsWith("memcached-") && !name.endsWith(".tar.gz"))
+    );
+    if (!memSrc || !existsSync(join(memSrc, "configure"))) {
+      throw new Error("memcached source tree not found after extract");
+    }
+    options.onProgress?.(`Compiling Memcached ${options.version}…`);
+    await runCommand(
+      join(memSrc, "configure"),
+      [`--prefix=${basedir}`, `--with-libevent=${basedir}`],
+      {
+        cwd: memSrc,
+        env: {
+          ...process.env,
+          CPPFLAGS: `-I${join(basedir, "include")} ${process.env.CPPFLAGS ?? ""}`.trim(),
+          LDFLAGS: `-L${libDir} ${process.env.LDFLAGS ?? ""}`.trim(),
+          LD_LIBRARY_PATH: libDir + (process.env.LD_LIBRARY_PATH ? `:${process.env.LD_LIBRARY_PATH}` : ""),
+        },
+      }
+    );
+    await runCommand("make", ["-j", String(parallelJobs())], { cwd: memSrc });
+    await runCommand("make", ["install"], { cwd: memSrc });
+
+    if (!existsSync(binaryPath)) {
+      throw new Error(`memcached missing after build: ${binaryPath}`);
+    }
+    chmodX(binaryPath);
+    options.onProgress?.(`Memcached ${options.version} ready (source build)`);
+    return { binaryPath, libDir };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+async function assertBuildTools(): Promise<void> {
+  const missing: string[] = [];
+  for (const tool of ["cc", "make"]) {
+    try {
+      await runCommand("sh", ["-c", `command -v ${tool}`]);
+    } catch {
+      missing.push(tool);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `Memcached on Linux is built from source (Homebrew bottles need glibc ≥ 2.38). ` +
+        `Missing build tools: ${missing.join(", ")}. ` +
+        `Install a C compiler and make, then retry (e.g. Amazon Linux: sudo dnf install -y gcc make).`
+    );
+  }
+}
+
+function parallelJobs(): number {
+  const n = cpus()?.length ?? 2;
+  return Math.max(1, Math.min(8, Number(n) || 2));
+}
+
 async function relocateMacBinary(
   binaryPath: string,
   libDir: string
 ): Promise<void> {
-  // Fix dylib ids + references so no Homebrew prefix is required.
   const libs = readdirSync(libDir).filter((n) => n.endsWith(".dylib"));
   for (const name of libs) {
     const lib = join(libDir, name);

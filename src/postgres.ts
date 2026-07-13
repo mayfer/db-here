@@ -94,7 +94,25 @@ export async function startPgHere(
   });
 
   const instance = createPgHereInstance({ ...options, port });
-  await instance.start();
+  try {
+    await instance.start();
+  } catch (error) {
+    const message = String((error as Error)?.message ?? error);
+    if (
+      message.includes("Exec format error") ||
+      message.includes("os error 8")
+    ) {
+      const projectDir = resolve(options.projectDir ?? process.cwd());
+      const paths = getEnginePaths(projectDir, "postgres");
+      throw new Error(
+        `PostgreSQL failed to start (wrong CPU architecture binary or incomplete native package).\n` +
+          `Try: rm -rf ${paths.bin} && bun install\n` +
+          `On Linux arm64 ensure @pg-ts/pg-embedded-linux-arm64-gnu is present under node_modules.\n` +
+          `Original: ${message}`
+      );
+    }
+    throw error;
+  }
 
   const database = options.database ?? DEFAULT_DATABASE;
   const shouldCreate =

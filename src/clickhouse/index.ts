@@ -262,7 +262,16 @@ async function ensureClickhouseBinary(options: {
 }): Promise<string> {
   const basedir = join(options.installationDir, options.version);
   const binary = join(basedir, "clickhouse");
-  if (existsSync(binary)) return binary;
+  // Wipe bad installs (e.g. earlier bug copied share/clickhouse directory).
+  if (existsSync(binary) && !isExecutableFile(binary)) {
+    options.onProgress?.(
+      `Removing invalid ClickHouse install at ${binary}…`
+    );
+    rmSync(basedir, { recursive: true, force: true });
+  }
+  if (existsSync(binary) && isExecutableFile(binary)) {
+    return binary;
+  }
 
   const { url, label, kind } = clickhouseDownload(options.version);
   options.onProgress?.(
@@ -299,9 +308,9 @@ async function ensureClickhouseBinary(options: {
       safeRename(found, binary);
     }
     chmodX(binary);
-    if (!isRegularFile(binary)) {
+    if (!isExecutableFile(binary)) {
       throw new Error(
-        `ClickHouse install is not a binary file: ${binary}`
+        `ClickHouse install is not an executable file: ${binary}`
       );
     }
     options.onProgress?.(`ClickHouse ${options.version} ready`);
@@ -383,6 +392,16 @@ export async function startClickhouseHere(
 function isRegularFile(path: string): boolean {
   try {
     return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isExecutableFile(path: string): boolean {
+  try {
+    const st = statSync(path);
+    // regular file with any execute bit
+    return st.isFile() && (st.mode & 0o111) !== 0;
   } catch {
     return false;
   }
