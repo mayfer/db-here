@@ -8,14 +8,14 @@ import {
   rmSync,
   symlinkSync,
 } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
-const DB_HERE_DIR = "db-here";
+/** Default visible project folder for binaries + data + config. */
+export const DEFAULT_DATA_ROOT = "db-here-data";
 const VERSION_DIR_RE = /^\d+\.\d+(?:\.\d+)?$/;
 
 const LIBXML2_SONAME = "libxml2.so.2";
 const LIBXML2_ALTERNATE_SONAME = "libxml2.so.16";
-const LIBXML2_COMPAT_DIR = join(DB_HERE_DIR, "postgres", "config", "runtime-libs");
 const LIB_PATHS = [
   "/usr/lib/x86_64-linux-gnu",
   "/usr/lib/aarch64-linux-gnu",
@@ -28,19 +28,26 @@ const LIB_PATHS = [
   "/usr/local/lib",
 ];
 
-function enginePaths(projectDir, engine) {
-  const root = join(projectDir, DB_HERE_DIR, engine);
+function enginePaths(projectDir, engine, dataRoot = DEFAULT_DATA_ROOT) {
+  const project = resolve(projectDir);
+  const dataRootAbs = resolve(project, dataRoot);
+  const root = join(dataRootAbs, engine);
+  const rel = relative(project, root);
+  const displayRoot =
+    rel && !rel.startsWith("..") && !isAbsolute(rel)
+      ? rel.split("\\").join("/")
+      : root;
   return {
     root,
-    displayRoot: `${DB_HERE_DIR}/${engine}`,
+    displayRoot,
     data: join(root, "data"),
     config: join(root, "config"),
     bin: join(root, "bin"),
   };
 }
 
-export function getPreStartPgState(projectDir) {
-  const paths = enginePaths(projectDir, "postgres");
+export function getPreStartPgState(projectDir, dataRoot) {
+  const paths = enginePaths(projectDir, "postgres", dataRoot);
   const installedVersions = listVersionDirs(paths.bin);
 
   return {
@@ -54,8 +61,8 @@ export function getPreStartPgState(projectDir) {
   };
 }
 
-export function getPreStartMysqlState(projectDir) {
-  const paths = enginePaths(projectDir, "mysql");
+export function getPreStartMysqlState(projectDir, dataRoot) {
+  const paths = enginePaths(projectDir, "mysql", dataRoot);
   const installedVersions = listVersionDirs(paths.bin).filter((version) =>
     existsSync(join(paths.bin, version, "bin", "mysqld"))
   );
@@ -75,8 +82,8 @@ export function getPreStartMysqlState(projectDir) {
   };
 }
 
-export function getPreStartRedisState(projectDir) {
-  const paths = enginePaths(projectDir, "redis");
+export function getPreStartRedisState(projectDir, dataRoot) {
+  const paths = enginePaths(projectDir, "redis", dataRoot);
   const installedVersions = listVersionDirs(paths.bin).filter((version) =>
     existsSync(join(paths.bin, version, "bin", "redis-server"))
   );
@@ -165,14 +172,18 @@ function compareSemVerDesc(left, right) {
  * libxml2.so.16 is present. Create a project-local symlink + LD_LIBRARY_PATH
  * so we never need sudo or system package installs.
  */
-export async function withPostgresLinuxCompat(start, projectDir) {
+export async function withPostgresLinuxCompat(
+  start,
+  projectDir,
+  dataRoot = DEFAULT_DATA_ROOT
+) {
   try {
     return await start();
   } catch (error) {
     if (!needsLibxml2Compat(error)) {
       throw error;
     }
-    if (!ensureLibxml2Compatibility(projectDir)) {
+    if (!ensureLibxml2Compatibility(projectDir, dataRoot)) {
       throw error;
     }
     return await start();
@@ -184,14 +195,19 @@ function needsLibxml2Compat(error) {
   return message.includes("libxml2.so.2") || message.includes("libxml2");
 }
 
-function ensureLibxml2Compatibility(workingDir) {
+function ensureLibxml2Compatibility(workingDir, dataRoot = DEFAULT_DATA_ROOT) {
   if (process.platform !== "linux") {
     return false;
   }
 
   const projectDir =
     typeof workingDir === "string" && workingDir ? workingDir : process.cwd();
-  const compatDir = join(projectDir, LIBXML2_COMPAT_DIR);
+  const compatDir = join(
+    resolve(projectDir, dataRoot),
+    "postgres",
+    "config",
+    "runtime-libs"
+  );
   const compatLib = join(compatDir, LIBXML2_SONAME);
 
   if (findLibraryPath(LIBXML2_SONAME)) {

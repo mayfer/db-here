@@ -41,6 +41,7 @@ class MongodbInstance {
   constructor(
     opts: {
       projectDir: string;
+      dataRoot?: string;
       dataDir?: string;
       configDir?: string;
       installationDir?: string;
@@ -50,7 +51,7 @@ class MongodbInstance {
       onProgress?: (m: string) => void;
     }
   ) {
-    const paths = getEnginePaths(opts.projectDir, "mongodb");
+    const paths = getEnginePaths(opts.projectDir, "mongodb", opts.dataRoot);
     this.dataDir = resolve(opts.dataDir ?? paths.data);
     this.configDir = resolve(opts.configDir ?? paths.config);
     this.installationDir = resolve(opts.installationDir ?? paths.bin);
@@ -182,6 +183,7 @@ export async function startMongodbHere(
 
   const instance = new MongodbInstance({
     projectDir,
+    dataRoot: options.dataRoot,
     dataDir: options.dataDir,
     configDir: options.configDir,
     installationDir: options.installationDir,
@@ -211,8 +213,15 @@ export async function startMongodbHere(
   });
 }
 
-export function getPreStartMongodbState(projectDir?: string) {
-  const paths = getEnginePaths(resolve(projectDir ?? process.cwd()), "mongodb");
+export function getPreStartMongodbState(
+  projectDir?: string,
+  dataRoot?: string
+) {
+  const paths = getEnginePaths(
+    resolve(projectDir ?? process.cwd()),
+    "mongodb",
+    dataRoot
+  );
   return {
     dataDir: paths.data,
     hasData: existsSync(paths.data) && existsSync(join(paths.data, "WiredTiger")),

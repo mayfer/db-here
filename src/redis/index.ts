@@ -68,6 +68,7 @@ export async function startRedisHere(
 
   const instance = new RedisInstance({
     projectDir: options.projectDir,
+    dataRoot: options.dataRoot,
     dataDir: options.dataDir,
     installationDir: options.installationDir,
     confDir: options.confDir,
@@ -128,14 +129,18 @@ export async function startRedisHere(
   };
 }
 
-export function getPreStartRedisState(projectDir?: string) {
+export function getPreStartRedisState(
+  projectDir?: string,
+  dataRoot?: string
+) {
   const root = resolve(projectDir ?? process.cwd());
-  const paths = getEnginePaths(root, "redis");
+  const paths = getEnginePaths(root, "redis", dataRoot);
   const installedVersions = getInstalledRedisVersions(paths.bin);
 
   return {
     dataDir: paths.data,
     confDir: paths.config,
+    localDir: paths.displayRoot,
     hasData:
       existsSync(paths.data) &&
       (existsSync(join(paths.data, "dump.rdb")) ||

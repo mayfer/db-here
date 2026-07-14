@@ -47,6 +47,7 @@ class OpensearchInstance {
 
   constructor(opts: {
     projectDir: string;
+    dataRoot?: string;
     dataDir?: string;
     configDir?: string;
     installationDir?: string;
@@ -54,7 +55,7 @@ class OpensearchInstance {
     port: number;
     onProgress?: (m: string) => void;
   }) {
-    const paths = getEnginePaths(opts.projectDir, "opensearch");
+    const paths = getEnginePaths(opts.projectDir, "opensearch", opts.dataRoot);
     this.dataDir = resolve(opts.dataDir ?? paths.data);
     this.configDir = resolve(opts.configDir ?? paths.config);
     this.installationDir = resolve(opts.installationDir ?? paths.bin);
@@ -268,6 +269,7 @@ export async function startOpensearchHere(
 
   const instance = new OpensearchInstance({
     projectDir,
+    dataRoot: options.dataRoot,
     dataDir: options.dataDir,
     configDir: options.configDir,
     installationDir: options.installationDir,
@@ -305,10 +307,14 @@ export async function startOpensearchHere(
   });
 }
 
-export function getPreStartOpensearchState(projectDir?: string) {
+export function getPreStartOpensearchState(
+  projectDir?: string,
+  dataRoot?: string
+) {
   const paths = getEnginePaths(
     resolve(projectDir ?? process.cwd()),
-    "opensearch"
+    "opensearch",
+    dataRoot
   );
   return {
     dataDir: paths.data,

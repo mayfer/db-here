@@ -38,7 +38,7 @@ export function createPgHereInstance(
   options: PostgresOptions & { version?: string } = {}
 ): PostgresInstance {
   const projectDir = resolve(options.projectDir ?? process.cwd());
-  const paths = getEnginePaths(projectDir, "postgres");
+  const paths = getEnginePaths(projectDir, "postgres", options.dataRoot);
   const dataDir = resolve(options.dataDir ?? paths.data);
   const installationDir = resolve(options.installationDir ?? paths.bin);
   const postgresVersion =
@@ -104,7 +104,7 @@ export async function startPgHere(
   });
 
   const projectDir = resolve(options.projectDir ?? process.cwd());
-  const paths = getEnginePaths(projectDir, "postgres");
+  const paths = getEnginePaths(projectDir, "postgres", options.dataRoot);
   const installationDir = resolve(options.installationDir ?? paths.bin);
   const version =
     options.postgresVersion ?? options.version ?? DEFAULT_PG_SERVER_VERSION;

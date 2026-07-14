@@ -8,7 +8,7 @@ export const supported =
 
 /** Project-local binary cache (shared across test runs for speed). */
 export function binCache(engine: string): string {
-  return join(process.cwd(), "db-here", engine, "bin");
+  return join(process.cwd(), "db-here-data", engine, "bin");
 }
 
 export function tempProject(prefix = "db-here-"): string {

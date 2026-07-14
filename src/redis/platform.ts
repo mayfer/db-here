@@ -38,7 +38,7 @@ export function detectRedisPlatform(): RedisPlatformInfo {
 /**
  * Pinned conda-forge package builds for redis-server + openssl.
  * These are official conda-forge builds with @rpath / relative lib loading
- * so we can keep everything under db-here/redis/ with no system install.
+ * so we can keep everything under <dataRoot>/redis/ with no system install.
  */
 export const DEFAULT_REDIS_VERSION = "7.4.7";
 export const OPENSSL_PACKAGE_VERSION = "3.5.4";

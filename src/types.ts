@@ -15,7 +15,17 @@ export interface StopOptions {
 }
 
 export interface CommonDbOptions {
+  /**
+   * Project working directory (default: `process.cwd()`).
+   * Used as the base for relative `dataRoot` and default paths.
+   */
   projectDir?: string;
+  /**
+   * Parent folder for engine state (`<dataRoot>/<engine>/{data,config,bin}`).
+   * Relative paths resolve under `projectDir`. Default: `db-here-data`.
+   * CLI: `--data-root`.
+   */
+  dataRoot?: string;
   port?: number;
   username?: string;
   password?: string;
@@ -26,8 +36,11 @@ export interface CommonDbOptions {
   cleanupOnShutdown?: boolean;
   autoPort?: boolean;
   version?: string;
+  /** Override engine data directory (default: `<dataRoot>/<engine>/data`). */
   dataDir?: string;
+  /** Override binary install directory (default: `<dataRoot>/<engine>/bin`). */
   installationDir?: string;
+  /** Override config directory (default: `<dataRoot>/<engine>/config`). */
   configDir?: string;
 }
 

@@ -4,16 +4,16 @@ Run a local database **inside your project folder** with one command.
 
 Downloads the server binary, keeps data local, needs **no system packages, no Docker, no Homebrew, no OS configuration**.
 
-| Engine     | CLI                 | Default port | Local folder            |
-|------------|---------------------|--------------|-------------------------|
-| PostgreSQL | `db-here` / `postgres` | `55432`   | `db-here/postgres/`     |
-| MySQL      | `db-here mysql`     | `33306`      | `db-here/mysql/`        |
-| Redis      | `db-here redis`     | `56379`      | `db-here/redis/`        |
-| MongoDB    | `db-here mongodb`   | `57017`      | `db-here/mongodb/`      |
-| MinIO      | `db-here minio`     | `59000`      | `db-here/minio/`        |
-| ClickHouse | `db-here clickhouse`| `58123`      | `db-here/clickhouse/`   |
-| OpenSearch | `db-here opensearch`| `59200`      | `db-here/opensearch/`   |
-| Memcached  | `db-here memcached` | `51211`      | `db-here/memcached/`    |
+| Engine     | CLI                 | Default port | Local folder                 |
+|------------|---------------------|--------------|------------------------------|
+| PostgreSQL | `db-here` / `postgres` | `55432`   | `db-here-data/postgres/`     |
+| MySQL      | `db-here mysql`     | `33306`      | `db-here-data/mysql/`        |
+| Redis      | `db-here redis`     | `56379`      | `db-here-data/redis/`        |
+| MongoDB    | `db-here mongodb`   | `57017`      | `db-here-data/mongodb/`      |
+| MinIO      | `db-here minio`     | `59000`      | `db-here-data/minio/`        |
+| ClickHouse | `db-here clickhouse`| `58123`      | `db-here-data/clickhouse/`   |
+| OpenSearch | `db-here opensearch`| `59200`      | `db-here-data/opensearch/`   |
+| Memcached  | `db-here memcached` | `51211`      | `db-here-data/memcached/`    |
 
 ## 30-second start
 
@@ -131,6 +131,9 @@ bunx db-here mongodb  --database my_app --port 57017
 bunx db-here minio    --username minioadmin --password secret --port 59000
 bunx db-here clickhouse --username default --password secret --port 58123
 bunx db-here memcached --port 51211
+
+# Custom folder for binaries + data + config (default: db-here-data)
+bunx db-here postgres --data-root ./my-local-dbs
 ```
 
 In this repo (same CLI as `bunx db-here`):
@@ -146,7 +149,9 @@ bun run db-here opensearch
 bun run db-here memcached
 ```
 
-## Programmatic
+## Programmatic (JS/TS API)
+
+Yes — this package exports a full programmatic API (not CLI-only).
 
 ```ts
 import {
@@ -159,12 +164,15 @@ import {
   startOpensearchHere,
   startPgHere,
   startRedisHere,
+  DEFAULT_DATA_ROOT,
 } from "db-here";
 
+// Unified entry (defaults to postgres when engine is omitted)
 const mongo = await startDbHere({ engine: "mongodb", database: "my_app" });
 console.log(mongo.databaseConnectionString);
 await mongo.stop();
 
+// Per-engine helpers
 const minio = await startMinioHere({ password: "secret" });
 console.log(minio.connectionString, minio.consolePort);
 
@@ -173,13 +181,25 @@ const res = await fetch(`${ch.connectionString}/?query=SELECT%201`);
 
 const cache = await startMemcachedHere({ memoryMb: 128 });
 await cache.stop();
+
+// Custom data root (same as CLI --data-root; default is "db-here-data")
+const pg = await startPgHere({
+  dataRoot: "./my-local-dbs", // relative to projectDir / cwd
+  // or absolute: dataRoot: "/var/tmp/app-dbs",
+});
+console.log(DEFAULT_DATA_ROOT); // "db-here-data"
+await pg.stop();
 ```
+
+Common options (all engines): `projectDir`, `dataRoot`, `port`, `username`,
+`password`, `database`, `version`, `autoPort`, plus optional overrides
+`dataDir` / `installationDir` / `configDir`.
 
 ## How it works
 
-- **PostgreSQL** — [`pg-embedded`](https://www.npmjs.com/package/pg-embedded) platform binaries under `db-here/postgres/bin/`.
-- **MySQL** — official MySQL Community Server generic tarball under `db-here/mysql/bin/<version>/`.
-- **Redis** — conda-forge `redis-server` + `openssl` under `db-here/redis/bin/<version>/`.
+- **PostgreSQL** — [`pg-embedded`](https://www.npmjs.com/package/pg-embedded) platform binaries under `db-here-data/postgres/bin/`.
+- **MySQL** — official MySQL Community Server generic tarball under `db-here-data/mysql/bin/<version>/`.
+- **Redis** — conda-forge `redis-server` + `openssl` under `db-here-data/redis/bin/<version>/`.
 - **MongoDB** — official Community Server tarball from `fastdl.mongodb.org`.
 - **MinIO** — single official binary per OS/arch (`dl.min.io`).
 - **ClickHouse** — static binary (macOS builds / Linux common-static tgz).
@@ -195,7 +215,7 @@ Supported platforms (no OS-level setup):
 
 ```text
 your-project/
-  db-here/
+  db-here-data/          # or --data-root / dataRoot
     postgres/
       data/
       config/
@@ -230,7 +250,7 @@ your-project/
       bin/<version>/
 ```
 
-Add `db-here/` to `.gitignore` (this package’s template already does).
+Add `db-here-data/` to `.gitignore` (this package’s template already does).
 
 ## Zero dependencies outside the project
 

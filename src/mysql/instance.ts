@@ -22,6 +22,7 @@ const DEFAULT_DATABASE = "mysql";
 
 export interface MysqlInstanceOptions {
   projectDir?: string;
+  dataRoot?: string;
   dataDir?: string;
   installationDir?: string;
   configDir?: string;
@@ -62,7 +63,7 @@ export class MysqlInstance {
 
   constructor(options: MysqlInstanceOptions = {}) {
     this.projectDir = resolve(options.projectDir ?? process.cwd());
-    const paths = getEnginePaths(this.projectDir, "mysql");
+    const paths = getEnginePaths(this.projectDir, "mysql", options.dataRoot);
     this.dataDir = resolve(options.dataDir ?? paths.data);
     this.installationDir = resolve(options.installationDir ?? paths.bin);
     this.configDir = resolve(options.configDir ?? paths.config);

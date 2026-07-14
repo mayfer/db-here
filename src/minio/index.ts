@@ -42,6 +42,7 @@ class MinioInstance {
 
   constructor(opts: {
     projectDir: string;
+    dataRoot?: string;
     dataDir?: string;
     configDir?: string;
     installationDir?: string;
@@ -52,7 +53,7 @@ class MinioInstance {
     password: string;
     onProgress?: (m: string) => void;
   }) {
-    const paths = getEnginePaths(opts.projectDir, "minio");
+    const paths = getEnginePaths(opts.projectDir, "minio", opts.dataRoot);
     this.dataDir = resolve(opts.dataDir ?? paths.data);
     this.configDir = resolve(opts.configDir ?? paths.config);
     this.installationDir = resolve(opts.installationDir ?? paths.bin);
@@ -191,6 +192,7 @@ export async function startMinioHere(
 
   const instance = new MinioInstance({
     projectDir,
+    dataRoot: options.dataRoot,
     dataDir: options.dataDir,
     configDir: options.configDir,
     installationDir: options.installationDir,
@@ -224,8 +226,15 @@ export async function startMinioHere(
   return { ...handle, consolePort };
 }
 
-export function getPreStartMinioState(projectDir?: string) {
-  const paths = getEnginePaths(resolve(projectDir ?? process.cwd()), "minio");
+export function getPreStartMinioState(
+  projectDir?: string,
+  dataRoot?: string
+) {
+  const paths = getEnginePaths(
+    resolve(projectDir ?? process.cwd()),
+    "minio",
+    dataRoot
+  );
   return {
     dataDir: paths.data,
     hasData: existsSync(paths.data),

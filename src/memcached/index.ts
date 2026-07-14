@@ -51,6 +51,7 @@ class MemcachedInstance {
 
   constructor(opts: {
     projectDir: string;
+    dataRoot?: string;
     dataDir?: string;
     configDir?: string;
     installationDir?: string;
@@ -59,7 +60,7 @@ class MemcachedInstance {
     memoryMb: number;
     onProgress?: (m: string) => void;
   }) {
-    const paths = getEnginePaths(opts.projectDir, "memcached");
+    const paths = getEnginePaths(opts.projectDir, "memcached", opts.dataRoot);
     this.dataDir = resolve(opts.dataDir ?? paths.data);
     this.configDir = resolve(opts.configDir ?? paths.config);
     this.installationDir = resolve(opts.installationDir ?? paths.bin);
@@ -493,6 +494,7 @@ export async function startMemcachedHere(
 
   const instance = new MemcachedInstance({
     projectDir,
+    dataRoot: options.dataRoot,
     dataDir: options.dataDir,
     configDir: options.configDir,
     installationDir: options.installationDir,
@@ -521,10 +523,14 @@ export async function startMemcachedHere(
   });
 }
 
-export function getPreStartMemcachedState(projectDir?: string) {
+export function getPreStartMemcachedState(
+  projectDir?: string,
+  dataRoot?: string
+) {
   const paths = getEnginePaths(
     resolve(projectDir ?? process.cwd()),
-    "memcached"
+    "memcached",
+    dataRoot
   );
   return {
     dataDir: paths.data,

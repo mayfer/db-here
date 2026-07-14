@@ -21,6 +21,7 @@ const DEFAULT_DATABASE = "0";
 
 export interface RedisInstanceOptions {
   projectDir?: string;
+  dataRoot?: string;
   dataDir?: string;
   installationDir?: string;
   confDir?: string;
@@ -58,7 +59,7 @@ export class RedisInstance {
 
   constructor(options: RedisInstanceOptions = {}) {
     this.projectDir = resolve(options.projectDir ?? process.cwd());
-    const paths = getEnginePaths(this.projectDir, "redis");
+    const paths = getEnginePaths(this.projectDir, "redis", options.dataRoot);
     this.dataDir = resolve(options.dataDir ?? paths.data);
     this.installationDir = resolve(options.installationDir ?? paths.bin);
     this.confDir = resolve(options.confDir ?? paths.config);
@@ -119,7 +120,7 @@ export class RedisInstance {
 
     try {
       if (this.binary) {
-        // Default SHUTDOWN flushes AOF/RDB so data under db-here/redis/data survives.
+        // Default SHUTDOWN flushes AOF/RDB so data under <dataRoot>/redis/data survives.
         await this.runCli(["SHUTDOWN"]).catch(() => {
           this.process?.kill("SIGTERM");
         });

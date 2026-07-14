@@ -80,6 +80,7 @@ export async function startMysqlHere(
   const version = options.mysqlVersion ?? options.version ?? DEFAULT_MYSQL_VERSION;
   const instance = new MysqlInstance({
     projectDir: options.projectDir,
+    dataRoot: options.dataRoot,
     dataDir: options.dataDir,
     installationDir: options.installationDir,
     version,
@@ -154,14 +155,18 @@ export async function startMysqlHere(
   };
 }
 
-export function getPreStartMysqlState(projectDir?: string) {
+export function getPreStartMysqlState(
+  projectDir?: string,
+  dataRoot?: string
+) {
   const root = resolve(projectDir ?? process.cwd());
-  const paths = getEnginePaths(root, "mysql");
+  const paths = getEnginePaths(root, "mysql", dataRoot);
   const installedVersions = getInstalledMysqlVersions(paths.bin);
 
   return {
     dataDir: paths.data,
     configDir: paths.config,
+    localDir: paths.displayRoot,
     hasData:
       existsSync(paths.data) &&
       (existsSync(join(paths.data, "mysql")) ||

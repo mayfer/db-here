@@ -29,11 +29,12 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .DS_Store
 
 # local database binaries + data + config (when developing this package itself)
-# Note: consumer projects should gitignore "db-here/" at their project root.
-/db-here/
+# Note: consumer projects should gitignore "db-here-data/" at their project root.
+/db-here-data/
 /db-here-tmp-*/
 
 # legacy folder names (if anything old is still around)
+/db-here/
 databases
 pg_local
 mysql_local

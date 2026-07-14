@@ -11,6 +11,7 @@ import { getPreStartMinioState } from "../src/minio/index.ts";
 import { getPreStartMongodbState } from "../src/mongodb/index.ts";
 import { getPreStartOpensearchState } from "../src/opensearch/index.ts";
 import {
+  DEFAULT_DATA_ROOT,
   getPreStartMysqlState,
   getPreStartPgState,
   getPreStartRedisState,
@@ -56,6 +57,12 @@ const argv = await yargs(rawArgs)
     describe: "Pin engine version (omit value to print db-here version)",
     type: "string",
   })
+  .option("data-root", {
+    describe:
+      "Folder for engine state (binaries, data, config). Relative to cwd. Default: db-here-data",
+    type: "string",
+    default: DEFAULT_DATA_ROOT,
+  })
   .option("auto-port", {
     default: "true",
     describe: "Auto-assign available port when default is in use",
@@ -63,6 +70,7 @@ const argv = await yargs(rawArgs)
   })
   .example("$0", "PostgreSQL")
   .example("$0 mysql", "MySQL")
+  .example("$0 --data-root ./my-dbs", "Custom data folder")
   .example("$0 --version", "Print db-here package version")
   .example("$0 mysql --version 9.7.1", "Start MySQL 9.7.1")
   .help()
@@ -91,36 +99,38 @@ const password = argv.password ?? defaults.password;
 const database = argv.database ?? defaults.database;
 const version = versionFlag.value;
 const projectDir = process.cwd();
+const dataRoot = argv["data-root"] ?? DEFAULT_DATA_ROOT;
 
 const preStartState = (() => {
   switch (engine) {
     case "mysql":
-      return getPreStartMysqlState(projectDir);
+      return getPreStartMysqlState(projectDir, dataRoot);
     case "redis":
-      return getPreStartRedisState(projectDir);
+      return getPreStartRedisState(projectDir, dataRoot);
     case "mongodb":
-      return getPreStartMongodbState(projectDir);
+      return getPreStartMongodbState(projectDir, dataRoot);
     case "minio":
-      return getPreStartMinioState(projectDir);
+      return getPreStartMinioState(projectDir, dataRoot);
     case "clickhouse":
-      return getPreStartClickhouseState(projectDir);
+      return getPreStartClickhouseState(projectDir, dataRoot);
     case "opensearch":
-      return getPreStartOpensearchState(projectDir);
+      return getPreStartOpensearchState(projectDir, dataRoot);
     case "memcached":
-      return getPreStartMemcachedState(projectDir);
+      return getPreStartMemcachedState(projectDir, dataRoot);
     default:
-      return getPreStartPgState(projectDir);
+      return getPreStartPgState(projectDir, dataRoot);
   }
 })();
 
 if (!preStartState.localDir) {
-  preStartState.localDir = `db-here/${engine}`;
+  preStartState.localDir = `${dataRoot}/${engine}`;
 }
 
 const start = () =>
   startDbHere({
     engine,
     projectDir,
+    dataRoot,
     port: argv.port !== undefined ? Number(argv.port) : undefined,
     username,
     password,
@@ -131,11 +141,11 @@ const start = () =>
 
 const handle =
   engine === "postgres"
-    ? await withPostgresLinuxCompat(start, projectDir)
+    ? await withPostgresLinuxCompat(start, projectDir, dataRoot)
     : await start();
 
 const displayVersion = handle.serverVersion ?? version ?? "default";
-const localDir = preStartState.localDir ?? `db-here/${engine}`;
+const localDir = preStartState.localDir ?? `${dataRoot}/${engine}`;
 const label = engineLabel(engine);
 if (preStartState.hasData) {
   console.log(`Reusing existing ${localDir}/data/ with ${label} ${displayVersion}`);

@@ -46,6 +46,7 @@ class ClickhouseInstance {
 
   constructor(opts: {
     projectDir: string;
+    dataRoot?: string;
     dataDir?: string;
     configDir?: string;
     installationDir?: string;
@@ -56,7 +57,7 @@ class ClickhouseInstance {
     password: string;
     onProgress?: (m: string) => void;
   }) {
-    const paths = getEnginePaths(opts.projectDir, "clickhouse");
+    const paths = getEnginePaths(opts.projectDir, "clickhouse", opts.dataRoot);
     this.dataDir = resolve(opts.dataDir ?? paths.data);
     this.configDir = resolve(opts.configDir ?? paths.config);
     this.installationDir = resolve(opts.installationDir ?? paths.bin);
@@ -347,6 +348,7 @@ export async function startClickhouseHere(
 
   const instance = new ClickhouseInstance({
     projectDir,
+    dataRoot: options.dataRoot,
     dataDir: options.dataDir,
     configDir: options.configDir,
     installationDir: options.installationDir,
@@ -407,10 +409,14 @@ function isExecutableFile(path: string): boolean {
   }
 }
 
-export function getPreStartClickhouseState(projectDir?: string) {
+export function getPreStartClickhouseState(
+  projectDir?: string,
+  dataRoot?: string
+) {
   const paths = getEnginePaths(
     resolve(projectDir ?? process.cwd()),
-    "clickhouse"
+    "clickhouse",
+    dataRoot
   );
   return {
     dataDir: paths.data,

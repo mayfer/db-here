@@ -15,7 +15,12 @@ export type {
 } from "./src/types.js";
 
 export type { ShutdownSignal } from "./src/shutdown.js";
-export { DB_HERE_DIR, getEnginePaths } from "./src/paths.js";
+export {
+  DEFAULT_DATA_ROOT,
+  DB_HERE_DIR,
+  getEnginePaths,
+  resolveDataRoot,
+} from "./src/paths.js";
 
 export {
   startPgHere,
