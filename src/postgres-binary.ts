@@ -45,9 +45,22 @@ function postgresBinaryPath(installationDir: string, version: string): string {
 }
 
 function isUsableInstall(installationDir: string, version: string): boolean {
+  const basedir = versionHome(installationDir, version);
   const binary = postgresBinaryPath(installationDir, version);
   if (!existsSync(binary)) return false;
-  if (!existsSync(join(versionHome(installationDir, version), "bin", "initdb"))) {
+  if (!existsSync(join(basedir, "bin", "initdb"))) {
+    return false;
+  }
+  // After EXDEV copy without verbatimSymlinks, libpq.so.5 can be a dangling
+  // absolute symlink into deleted /tmp — re-download if the library is missing.
+  const libDir = join(basedir, "lib");
+  const libpqCandidates = [
+    join(libDir, "libpq.so.5"),
+    join(libDir, "libpq.so"),
+    join(libDir, "libpq.5.dylib"),
+    join(libDir, "libpq.dylib"),
+  ];
+  if (!libpqCandidates.some((p) => existsSync(p))) {
     return false;
   }
   return binaryMatchesHost(binary);

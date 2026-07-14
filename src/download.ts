@@ -114,6 +114,12 @@ export function makeTempDir(prefix: string): string {
  * Move a file or directory to `to`.
  * Falls back to copy+delete when rename fails with EXDEV (cross-device),
  * which is common on Linux when /tmp and $HOME are different filesystems.
+ *
+ * Critical: use `verbatimSymlinks` so relative soname links (e.g.
+ * `libpq.so.5` → `libpq.so.5.18`) stay relative. Default Node/Bun cpSync
+ * rewrites them to absolute paths under the source tree; after we delete
+ * that tree the links dangle and loaders fail with "libpq.so.5: No such
+ * file or directory" even when RUNPATH=$ORIGIN/../lib is set correctly.
  */
 export function safeRename(from: string, to: string): void {
   mkdirSync(join(to, ".."), { recursive: true });
@@ -131,7 +137,7 @@ export function safeRename(from: string, to: string): void {
       throw error;
     }
     const fromStat = statSync(from);
-    cpSync(from, to, { recursive: true, force: true });
+    cpSync(from, to, { recursive: true, force: true, verbatimSymlinks: true });
     // Preserve mode for files (some filesystems drop +x on copy).
     if (fromStat.isFile()) {
       try {
