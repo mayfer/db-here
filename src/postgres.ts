@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { PostgresInstance } from "pg-embedded";
 import { Client } from "pg";
 import { getEnginePaths } from "./paths.js";
@@ -116,6 +117,10 @@ export async function startPgHere(
     onProgress: (m) => console.error(m),
   });
 
+  // Bundled libs (libpq.so.5, etc.) live next to the install; Linux loaders
+  // do not use rpath the way macOS @executable_path does, so put lib/ first.
+  prependPostgresLibPath(ensured.basedir);
+
   const startWithPinned = async () => {
     const instance = createPgHereInstance({
       ...options,
@@ -208,6 +213,35 @@ export async function startPgHere(
       ensurePgHereDatabase(instance, databaseName),
     removeShutdownHooks,
   };
+}
+
+/**
+ * Ensure initdb/postgres can resolve bundled shared libraries (libpq, etc.).
+ * Must run before any pg-embedded spawn of binaries under basedir/bin.
+ */
+export function prependPostgresLibPath(basedir: string): void {
+  const libDir = join(resolve(basedir), "lib");
+  if (!existsSync(libDir)) {
+    return;
+  }
+
+  const keys =
+    process.platform === "darwin"
+      ? (["DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH"] as const)
+      : (["LD_LIBRARY_PATH"] as const);
+
+  for (const key of keys) {
+    const current = process.env[key] ?? "";
+    const parts = current.split(":").filter(Boolean);
+    if (parts[0] === libDir) {
+      continue;
+    }
+    process.env[key] = parts.includes(libDir)
+      ? [libDir, ...parts.filter((p) => p !== libDir)].join(":")
+      : current
+        ? `${libDir}:${current}`
+        : libDir;
+  }
 }
 
 function setConnectionDatabase(
