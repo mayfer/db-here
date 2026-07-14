@@ -1,6 +1,12 @@
+import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { PostgresInstance } from "pg-embedded";
 import { Client } from "pg";
+import {
+  binaryCpuArch,
+  processCpuArch,
+  wipeMismatchedPostgresInstalls,
+} from "./binary-arch.js";
 import { getEnginePaths } from "./paths.js";
 import { resolvePort } from "./ports.js";
 import {
@@ -93,25 +99,46 @@ export async function startPgHere(
     autoPort: options.autoPort,
   });
 
-  const instance = createPgHereInstance({ ...options, port });
-  try {
+  const projectDir = resolve(options.projectDir ?? process.cwd());
+  const paths = getEnginePaths(projectDir, "postgres");
+  const installationDir = resolve(options.installationDir ?? paths.bin);
+
+  // Drop any cached postgres builds that don't match this CPU before start.
+  // Shared install dirs across machines (or bad downloads) cause "Exec format error".
+  wipeMismatchedPostgresInstalls(installationDir);
+
+  const startOnce = async () => {
+    const instance = createPgHereInstance({
+      ...options,
+      port,
+      installationDir,
+    });
     await instance.start();
+    return instance;
+  };
+
+  let instance: PostgresInstance;
+  try {
+    instance = await startOnce();
   } catch (error) {
     const message = String((error as Error)?.message ?? error);
-    if (
-      message.includes("Exec format error") ||
-      message.includes("os error 8")
-    ) {
-      const projectDir = resolve(options.projectDir ?? process.cwd());
-      const paths = getEnginePaths(projectDir, "postgres");
-      throw new Error(
-        `PostgreSQL failed to start (wrong CPU architecture binary or incomplete native package).\n` +
-          `Try: rm -rf ${paths.bin} && bun install\n` +
-          `On Linux arm64 ensure @pg-ts/pg-embedded-linux-arm64-gnu is present under node_modules.\n` +
-          `Original: ${message}`
-      );
+    if (!isExecFormatError(message)) {
+      throw error;
     }
-    throw error;
+
+    // Wipe the *actual* install dir we used (not a temp project path) and retry once.
+    if (existsSync(installationDir)) {
+      rmSync(installationDir, { recursive: true, force: true });
+    }
+
+    try {
+      instance = await startOnce();
+    } catch (retryError) {
+      const retryMessage = String(
+        (retryError as Error)?.message ?? retryError
+      );
+      throw new Error(formatPgExecError(installationDir, retryMessage));
+    }
   }
 
   const database = options.database ?? DEFAULT_DATABASE;
@@ -264,6 +291,43 @@ function quoteIdentifier(identifier: string): string {
 
 function escapeSqlLiteral(value: string): string {
   return value.replaceAll("'", "''");
+}
+
+function isExecFormatError(message: string): boolean {
+  return (
+    message.includes("Exec format error") ||
+    message.includes("os error 8") ||
+    /exec format/i.test(message)
+  );
+}
+
+function formatPgExecError(installationDir: string, message: string): string {
+  const host = processCpuArch();
+  // Probe common leftover binary if any remains after wipe
+  const probePaths = [
+    `${installationDir}/18.0.0/bin/postgres`,
+    `${installationDir}/18.4.0/bin/postgres`,
+  ];
+  let probe = "";
+  for (const p of probePaths) {
+    if (existsSync(p)) {
+      probe = `Found binary ${p} arch=${binaryCpuArch(p)} (host=${host}).\n`;
+      break;
+    }
+  }
+
+  return (
+    `PostgreSQL failed to start: wrong CPU architecture binary or broken native binding.\n` +
+    `Host CPU: ${host} (${process.platform}/${process.arch})\n` +
+    `Install dir: ${installationDir}\n` +
+    probe +
+    `Fix:\n` +
+    `  1. rm -rf ${installationDir}\n` +
+    `  2. rm -rf node_modules && bun install   # must run ON this machine (not copied from another arch)\n` +
+    `  3. On Linux arm64, confirm: ls node_modules/@pg-ts/pg-embedded-linux-arm64-gnu\n` +
+    `pg-embedded downloads server builds from github.com/theseus-rs/postgresql-binaries\n` +
+    `Original: ${message}`
+  );
 }
 
 export type { ShutdownSignal };

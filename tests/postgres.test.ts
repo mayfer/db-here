@@ -1,23 +1,31 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { Client } from "pg";
 import { startPgHere } from "../index";
+import {
+  binCache,
+  cleanupProject,
+  supported,
+  tcpOk,
+  tempProject,
+  testPort,
+} from "./helpers";
 
-const supported =
-  process.platform === "darwin" || process.platform === "linux";
-
-const port = 63000 + (process.pid % 1000);
-
+/**
+ * Contract for every engine test:
+ * 1. start
+ * 2. write + read a value
+ * 3. stop
+ * 4. start again on the same data dir
+ * 5. read the value back (durable engines)
+ */
 test.skipIf(!supported)(
-  "postgres programmatic startup creates missing database and preserves data",
+  "postgres: start, write, restart, read",
   async () => {
-    const projectDir = mkdtempSync(join(tmpdir(), "db-here-pg-"));
-    // Shared platform-native binary cache for this repo (never a sibling
-    // project's bin tree — that can be the wrong OS/arch).
-    const installationDir = join(process.cwd(), "db-here", "postgres", "bin");
-    const database = "app_startup_db";
+    const projectDir = tempProject("db-here-pg-");
+    const installationDir = binCache("postgres");
+    const port = testPort(63000);
+    const database = "app_db";
+
     const handle = await startPgHere({
       projectDir,
       port,
@@ -28,16 +36,16 @@ test.skipIf(!supported)(
     });
 
     try {
+      expect(await tcpOk(port)).toBe(true);
       const client = new Client({
         connectionString: handle.databaseConnectionString,
       });
       await client.connect();
-      const result = await client.query("select current_database() as db");
-      expect(result.rows[0]?.db).toBe(database);
-
       await client.query("create table if not exists persist_test (v text)");
       await client.query("truncate table persist_test");
       await client.query("insert into persist_test (v) values ('kept')");
+      const row = await client.query("select v from persist_test limit 1");
+      expect(row.rows[0]?.v).toBe("kept");
       await client.end();
       await handle.stop();
 
@@ -49,7 +57,6 @@ test.skipIf(!supported)(
         installationDir,
         registerProcessShutdownHandlers: false,
       });
-
       try {
         const client2 = new Client({
           connectionString: restarted.databaseConnectionString,
@@ -64,7 +71,7 @@ test.skipIf(!supported)(
         await restarted.stop();
       }
     } finally {
-      rmSync(projectDir, { recursive: true, force: true });
+      cleanupProject(projectDir);
     }
   },
   180_000

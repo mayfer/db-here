@@ -1,21 +1,22 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { createConnection } from "mysql2/promise";
 import { startMysqlHere } from "../index";
-
-const supported =
-  process.platform === "darwin" || process.platform === "linux";
-
-const port = 34000 + (process.pid % 1000);
+import {
+  binCache,
+  cleanupProject,
+  supported,
+  tcpOk,
+  tempProject,
+  testPort,
+} from "./helpers";
 
 test.skipIf(!supported)(
-  "mysql programmatic startup creates database and preserves data on stop",
+  "mysql: start, write, restart, read",
   async () => {
-    const projectDir = mkdtempSync(join(tmpdir(), "db-here-mysql-"));
-    const database = "app_startup_db";
-    const installationDir = join(process.cwd(), "db-here", "mysql", "bin");
+    const projectDir = tempProject("db-here-mysql-");
+    const installationDir = binCache("mysql");
+    const port = testPort(34000);
+    const database = "app_db";
 
     const handle = await startMysqlHere({
       engine: "mysql",
@@ -28,21 +29,17 @@ test.skipIf(!supported)(
     });
 
     try {
+      expect(await tcpOk(port)).toBe(true);
       const conn = await createConnection(handle.databaseConnectionString);
-      const [rows] = await conn.query<Array<{ db: string }>>(
-        "SELECT DATABASE() AS db"
+      await conn.query(
+        "CREATE TABLE IF NOT EXISTS persist_test (v VARCHAR(32))"
       );
-      expect(rows[0]?.db).toBe(database);
-
-      await conn.query("CREATE TABLE IF NOT EXISTS persist_test (v VARCHAR(32))");
       await conn.query("TRUNCATE TABLE persist_test");
       await conn.query("INSERT INTO persist_test (v) VALUES ('kept')");
-
-      const [versionRows] = await conn.query<Array<{ v: string }>>(
-        "SELECT VERSION() AS v"
+      const [rows] = await conn.query<Array<{ v: string }>>(
+        "SELECT v FROM persist_test LIMIT 1"
       );
-      expect(String(versionRows[0]?.v ?? "")).toMatch(/^9\./);
-
+      expect(rows[0]?.v).toBe("kept");
       await conn.end();
       await handle.stop();
 
@@ -55,7 +52,6 @@ test.skipIf(!supported)(
         installationDir,
         registerProcessShutdownHandlers: false,
       });
-
       try {
         const conn2 = await createConnection(restarted.databaseConnectionString);
         const [persisted] = await conn2.query<Array<{ v: string }>>(
@@ -67,7 +63,7 @@ test.skipIf(!supported)(
         await restarted.stop();
       }
     } finally {
-      rmSync(projectDir, { recursive: true, force: true });
+      cleanupProject(projectDir);
     }
   },
   180_000

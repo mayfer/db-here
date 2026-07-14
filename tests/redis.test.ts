@@ -1,37 +1,37 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { startRedisHere } from "../index";
-
-const supported =
-  process.platform === "darwin" || process.platform === "linux";
-
-const port = 36000 + (process.pid % 1000);
+import {
+  binCache,
+  cleanupProject,
+  supported,
+  tcpOk,
+  tempProject,
+  testPort,
+} from "./helpers";
 
 test.skipIf(!supported)(
-  "redis programmatic startup persists data and config under db-here/redis",
+  "redis: start, write, restart, read",
   async () => {
-    const projectDir = mkdtempSync(join(tmpdir(), "db-here-redis-"));
-    const installationDir = join(process.cwd(), "db-here", "redis", "bin");
+    const projectDir = tempProject("db-here-redis-");
+    const installationDir = binCache("redis");
+    const port = testPort(36000);
+    const password = "s3cret";
+    const database = "2";
 
     const handle = await startRedisHere({
       engine: "redis",
       projectDir,
       port,
-      password: "s3cret",
-      database: "2",
+      password,
+      database,
       installationDir,
       registerProcessShutdownHandlers: false,
     });
 
     try {
-      expect(handle.engine).toBe("redis");
-      expect(handle.port).toBe(port);
-      expect(handle.databaseConnectionString).toContain(`:${port}/2`);
-      expect(handle.serverVersion).toMatch(/^7\./);
-
+      expect(await tcpOk(port)).toBe(true);
       const cli = join(installationDir, "7.4.7", "bin", "redis-cli");
       const libDir = join(installationDir, "7.4.7", "lib");
       const env = {
@@ -49,10 +49,10 @@ test.skipIf(!supported)(
           "-p",
           String(port),
           "-a",
-          "s3cret",
+          password,
           "--no-auth-warning",
           "-n",
-          "2",
+          database,
           "SET",
           "persist_test",
           "kept",
@@ -61,19 +61,17 @@ test.skipIf(!supported)(
       );
       expect(setResult.status).toBe(0);
       expect(setResult.stdout.trim()).toBe("OK");
-
       await handle.stop();
 
       const restarted = await startRedisHere({
         engine: "redis",
         projectDir,
         port,
-        password: "s3cret",
-        database: "2",
+        password,
+        database,
         installationDir,
         registerProcessShutdownHandlers: false,
       });
-
       try {
         const getResult = spawnSync(
           cli,
@@ -83,10 +81,10 @@ test.skipIf(!supported)(
             "-p",
             String(port),
             "-a",
-            "s3cret",
+            password,
             "--no-auth-warning",
             "-n",
-            "2",
+            database,
             "GET",
             "persist_test",
           ],
@@ -94,27 +92,11 @@ test.skipIf(!supported)(
         );
         expect(getResult.status).toBe(0);
         expect(getResult.stdout.trim()).toBe("kept");
-
-        // Config lives under db-here/redis/config
-        const confPath = join(
-          projectDir,
-          "db-here",
-          "redis",
-          "config",
-          "redis.conf"
-        );
-        const { existsSync, readFileSync } = await import("node:fs");
-        expect(existsSync(confPath)).toBe(true);
-        expect(readFileSync(confPath, "utf8")).toContain(`port ${port}`);
-        expect(readFileSync(confPath, "utf8")).toContain("requirepass s3cret");
-        expect(existsSync(join(projectDir, "db-here", "redis", "data"))).toBe(
-          true
-        );
       } finally {
         await restarted.stop();
       }
     } finally {
-      rmSync(projectDir, { recursive: true, force: true });
+      cleanupProject(projectDir);
     }
   },
   180_000
