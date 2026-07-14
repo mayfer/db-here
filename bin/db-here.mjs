@@ -39,13 +39,20 @@ if (versionFlag.present && versionFlag.value === undefined) {
 const argv = await yargs(rawArgs)
   .scriptName("db-here")
   .usage("$0 <engine> [options]")
-  .command("$0 [engine]", "Start a project-local database", (y) =>
-    y.positional("engine", {
-      describe: "Database engine",
-      choices: ENGINE_CHOICES,
-      default: "postgres",
-    })
+  .command(
+    "$0 <engine>",
+    "Start a project-local database",
+    (y) =>
+      y.positional("engine", {
+        describe: "Database engine (required — no default)",
+        choices: ENGINE_CHOICES,
+        type: "string",
+        demandOption: true,
+      }),
+    () => {}
   )
+  .demandCommand(1, "Specify an engine, e.g. db-here postgres")
+  .strictCommands()
   .version(false)
   .option("username", { alias: "u", describe: "Username / access key" })
   .option("password", { alias: "p", describe: "Password / secret key" })
@@ -69,9 +76,10 @@ const argv = await yargs(rawArgs)
     describe: "Auto-assign available port when default is in use",
     type: "string",
   })
+  .example("$0 postgres", "Start PostgreSQL")
   .example("$0 --version", "Print db-here package version")
   .example("$0 mysql --version 9.7.1", "Start MySQL 9.7.1")
-  .example("$0 --data-root ./my-dbs", "Custom data folder")
+  .example("$0 postgres --data-root ./my-dbs", "Custom data folder")
   .help()
   .parse();
 
@@ -86,9 +94,14 @@ const supported = [
   "opensearch",
   "memcached",
 ];
-if (!supported.includes(engine)) {
-  console.error(`Unknown engine: ${argv.engine}`);
+if (!engine || !supported.includes(engine)) {
+  console.error(
+    engine
+      ? `Unknown engine: ${argv.engine}`
+      : "Engine is required (no default)."
+  );
   console.error(`Supported: ${supported.join(", ")}`);
+  console.error("Example: db-here postgres");
   process.exit(1);
 }
 

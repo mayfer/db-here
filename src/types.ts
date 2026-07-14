@@ -60,6 +60,7 @@ export interface DbHereHandle {
 }
 
 export interface PostgresOptions extends CommonDbOptions {
+  /** Set when calling `startDbHere`; optional for `startPgHere`. */
   engine?: "postgres";
   postgresVersion?: string;
   persistent?: boolean;
@@ -109,8 +110,9 @@ export interface MemcachedOptions extends CommonDbOptions {
   memoryMb?: number;
 }
 
+/** Options for `startDbHere` — `engine` is always required (no default). */
 export type DbHereOptions =
-  | (PostgresOptions & { engine?: "postgres" })
+  | (PostgresOptions & { engine: "postgres" })
   | (MysqlOptions & { engine: "mysql" })
   | (RedisOptions & { engine: "redis" })
   | (MongodbOptions & { engine: "mongodb" })

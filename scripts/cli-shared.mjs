@@ -14,7 +14,10 @@ export const ENGINE_CHOICES = [
 ];
 
 export function normalizeEngine(raw) {
-  const e = String(raw ?? "postgres");
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return "";
+  }
+  const e = String(raw).trim();
   if (e === "pg") return "postgres";
   if (e === "mongo") return "mongodb";
   return e;

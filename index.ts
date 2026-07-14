@@ -132,12 +132,20 @@ const ENGINES = [
 ] as const;
 
 /**
- * Start a project-local database. Defaults to PostgreSQL when `engine` is omitted.
+ * Start a project-local database. `engine` is required (no default).
+ * Prefer per-engine helpers (`startPgHere`, `startMysqlHere`, …) when the
+ * engine is known at compile time.
  */
 export async function startDbHere(
-  options: DbHereOptions = {}
+  options: DbHereOptions
 ): Promise<DbHereHandle> {
-  const engine = options.engine ?? "postgres";
+  if (!options?.engine) {
+    throw new Error(
+      `engine is required. Supported: ${ENGINES.join(", ")}`
+    );
+  }
+
+  const engine = options.engine;
 
   switch (engine) {
     case "postgres":
